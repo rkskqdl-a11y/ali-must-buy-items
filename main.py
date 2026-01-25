@@ -83,7 +83,7 @@ def generate_blog_content(product, available_model_names):
     return None
 
 def main():
-    os.makedirs("posts", exist_ok=True)
+    os.makedirs("_posts", exist_ok=True)
     
     # 1. 사용 가능한 모델 이름들 먼저 확인 (로그에 출력됨)
     available_models = list_available_models()
@@ -107,7 +107,7 @@ def main():
     
     if content:
         today = datetime.now().strftime("%Y-%m-%d")
-        file_path = f"posts/{today}-{selected_product.get('product_id')}.md"
+        file_path = f"_posts/{today}-{selected_product.get('product_id')}.md"
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(content)
         print(f"🎉 SUCCESS: {file_path} created!")
