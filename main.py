@@ -13,8 +13,8 @@ ALI_SECRET = os.environ.get("ALI_SECRET", "").strip()
 ALI_TRACKING_ID = os.environ.get("ALI_TRACKING_ID", "").strip()
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
 
-if ALI_SECRET:
-    print(f"✅ 비밀키 로드 성공 (길이: {len(ALI_SECRET)})")
+print(f"DEBUG: ALI_APP_KEY exists: {bool(ALI_APP_KEY)}")
+print(f"DEBUG: ALI_SECRET length: {len(ALI_SECRET)}")
 
 def get_ali_products(keyword):
     url = "https://api-sg.aliexpress.com/sync"
@@ -41,69 +41,69 @@ def get_ali_products(keyword):
         response = requests.post(url, data=params)
         data = response.json()
         if "aliexpress_affiliate_product_query_response" in data:
-            result = data["aliexpress_affiliate_product_query_response"]["resp_result"]["result"]
-            return result["products"]["product"]
+            return data["aliexpress_affiliate_product_query_response"]["resp_result"]["result"]["products"]["product"]
+        print(f"DEBUG: Ali API Response: {data}")
         return []
-    except:
+    except Exception as e:
+        print(f"DEBUG: Ali API Exception: {e}")
         return []
 
 def generate_blog_content(product):
-    # 모델 경로를 v1으로, 모델명을 gemini-1.5-flash로 명확히 지정
-    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+    # 가장 범용적인 v1beta 모델 주소 사용
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
     
     headers = {'Content-Type': 'application/json'}
-    prompt_text = f"Review this product in English: {product.get('product_title')}. Price: ${product.get('target_sale_price')}. Use Markdown."
+    prompt_text = f"Write a professional product review for: {product.get('product_title')}. Price: ${product.get('target_sale_price')}. In English, Markdown format."
     
-    payload = {
-        "contents": [{"parts": [{"text": prompt_text}]}]
-    }
+    payload = {"contents": [{"parts": [{"text": prompt_text}]}]}
     
     try:
-        # v1 경로로 시도
         response = requests.post(url, headers=headers, json=payload)
         result = response.json()
-        
-        # 만약 v1에서 실패하면 v1beta로 재시도 (안전장치)
-        if "error" in result:
-            url_beta = url.replace("/v1/", "/v1beta/")
-            response = requests.post(url_beta, headers=headers, json=payload)
-            result = response.json()
-
         if "candidates" in result:
             return result["candidates"][0]["content"]["parts"][0]["text"]
-        print(f"❌ Gemini API Error: {result.get('error', {}).get('message')}")
+        print(f"DEBUG: Gemini API Error: {result}")
         return None
     except Exception as e:
-        print(f"❌ Connection Error: {e}")
+        print(f"DEBUG: Gemini Exception: {e}")
         return None
 
 def main():
-    try:
-        with open("keywords.txt", "r", encoding="utf-8") as f:
-            keywords = [line.strip() for line in f if line.strip()]
-    except: return
-
+    # 1. 키워드 로드
+    if not os.path.exists("keywords.txt"):
+        print("DEBUG: keywords.txt not found. Creating a default one.")
+        with open("keywords.txt", "w") as f: f.write("Smart Watch\nWireless Earbuds")
+    
+    with open("keywords.txt", "r", encoding="utf-8") as f:
+        keywords = [line.strip() for line in f if line.strip()]
+    
     target_keyword = random.choice(keywords)
-    print(f"🎯 Target Keyword: {target_keyword}")
+    print(f"🎯 Target: {target_keyword}")
 
+    # 2. 상품 검색
     products = get_ali_products(target_keyword)
     if not products:
-        print("❌ 상품 검색 실패")
+        print("❌ No products found from AliExpress.")
         return
 
-    selected_product = products[0] # 첫 번째 상품 선택
-    print(f"📝 글 작성 중: {selected_product['product_title'][:30]}...")
+    selected_product = products[0]
+    print(f"📝 Writing review for: {selected_product['product_title'][:30]}...")
+
+    # 3. 글 생성
     content = generate_blog_content(selected_product)
+    if not content:
+        print("❌ Failed to generate content from Gemini.")
+        return
+
+    # 4. 파일 저장
+    os.makedirs("posts", exist_ok=True)
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    file_path = f"posts/{today_str}-post.md"
     
-    if content:
-        today_str = datetime.now().strftime("%Y-%m-%d")
-        os.makedirs("posts", exist_ok=True)
-        file_name = f"posts/{today_str}-post.md"
-        
-        with open(file_name, "w", encoding="utf-8") as f:
-            f.write(f"---\ntitle: {selected_product['product_title']}\n---\n\n{content}\n\n[Buy Now]({selected_product['promotion_link']})")
-        
-        print(f"🎉 포스팅 완료: {file_name}")
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write(f"---\ntitle: {selected_product['product_title']}\n---\n\n{content}")
+    
+    print(f"🎉 SUCCESS: {file_path} created!")
 
 if __name__ == "__main__":
     main()
