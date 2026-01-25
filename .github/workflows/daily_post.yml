@@ -33,15 +33,16 @@ jobs:
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       run: python main.py
 
-    - name: 5. 결과 저장 및 푸시
+     - name: 5. 결과 저장 및 푸시
       run: |
         git config --global user.name "AliBot"
         git config --global user.email "alibot@noreply.github.com"
         
-        # 파일이 생성되었을 때만 커밋 진행 (128 에러 방지)
-        if [ -d "posts" ]; then
-          git add posts/
+        # ✅ 'posts'가 아니라 '_posts' 폴더를 추가하도록 수정
+        if [ -d "_posts" ]; then
+          git add _posts/
         fi
+        
         if [ -f "posted_ids.txt" ]; then
           git add posted_ids.txt
         fi
