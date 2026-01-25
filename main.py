@@ -35,7 +35,7 @@ def get_ali_products(keyword):
     except: return []
 
 def generate_blog_content(product):
-    # 🚀 제미나이 3.0 Flash 엔진 호출 (가장 안정적)
+    # Gemini 3.0의 추론 능력을 활용할 수 있는 모델들입니다.
     candidates = ["models/gemini-3-flash-preview", "models/gemini-2.0-flash", "models/gemini-1.5-flash"]
     headers = {'Content-Type': 'application/json'}
     prompt_text = (f"Review this product with Gemini 3.0 Reasoning: {product.get('product_title')}. "
@@ -47,18 +47,26 @@ def generate_blog_content(product):
             url = f"https://generativelanguage.googleapis.com/v1beta/{model_name}:generateContent?key={GEMINI_API_KEY}"
             response = requests.post(url, headers=headers, json=payload, timeout=60)
             result = response.json()
+            
             if "candidates" in result:
+                print(f"✅ Success using model: {model_name}")
                 return result["candidates"][0]["content"]["parts"][0]["text"]
-        except: continue
+            else:
+                # 🔍 에러 발생 시 로그를 상세히 찍어 원인을 파악합니다.
+                print(f"⚠️ Model {model_name} failed. Message: {result.get('error', {}).get('message', 'Unknown Error')}")
+                if "429" in str(result):
+                    print("Waiting for 5 seconds due to rate limit...")
+                    time.sleep(5)
+        except Exception as e:
+            print(f"ℹ️ Error with {model_name}: {e}")
+            continue
     return None
 
 def main():
-    # 📂 1. Jekyll 웹사이트 연동을 위한 폴더 생성
     os.makedirs("_posts", exist_ok=True)
     if not os.path.exists("posted_ids.txt"):
         with open("posted_ids.txt", "w") as f: f.write("")
 
-    # 2. 키워드 및 상품 검색
     all_keywords = get_massive_keyword_list()
     target = random.choice(all_keywords)
     print(f"🎯 Target: {target}")
@@ -71,24 +79,20 @@ def main():
     selected_product = products[0]
     print(f"📝 Writing Review: {selected_product['product_title'][:40]}...")
     
-    # 3. 제미나이 3.0 글 생성
     content = generate_blog_content(selected_product)
     
-    # ⚠️ 이 부분의 들여쓰기를 엄격히 맞췄습니다.
     if content:
         today = datetime.now().strftime("%Y-%m-%d")
-        # Jekyll 규격 파일명 설정
         file_path = f"_posts/{today}-{selected_product.get('product_id')}.md"
-        
         with open(file_path, "w", encoding="utf-8") as f:
-            # 404 에러 방지 및 목록 표시를 위한 Front Matter 추가
             f.write(f"---\nlayout: post\ntitle: \"{selected_product['product_title']}\"\ndate: {today}\n---\n\n{content}")
             
         with open("posted_ids.txt", "a") as f:
             f.write(f"{selected_product.get('product_id')}\n")
         print(f"🎉 SUCCESS: {file_path} created!")
     else:
-        print("❌ Content generation failed.")
+        # 실패 시에도 로그에 기록을 남겨 추적이 가능하게 합니다.
+        print("❌ Content generation failed. Please check the '⚠️ Model failed' messages above.")
 
 if __name__ == "__main__":
     main()
