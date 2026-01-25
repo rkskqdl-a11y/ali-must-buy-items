@@ -5,9 +5,6 @@ import hmac
 import hashlib
 import requests
 import json
-import warnings
-warnings.filterwarnings("ignore")
-import google.generativeai as genai
 from datetime import datetime
 
 # 1. 환경 변수 로드 (공백 제거 기능 포함)
@@ -21,11 +18,6 @@ if ALI_SECRET:
     print(f"✅ 비밀키 로드 성공 (공백 제거 후 길이: {len(ALI_SECRET)})")
 else:
     print("❌ 오류: ALI_SECRET이 비어있습니다.")
-
-# 2. Gemini 설정 (최신 모델로 변경)
-genai.configure(api_key=GEMINI_API_KEY)
-# 👇 여기가 수정된 부분입니다 (gemini-pro -> gemini-1.5-flash)
-model = genai.GenerativeModel('gemini-1.5-flash')
 
 def get_ali_products(keyword):
     url = "https://api-sg.aliexpress.com/sync"
@@ -59,23 +51,22 @@ def get_ali_products(keyword):
         response = requests.post(url, data=params)
         data = response.json()
         
-        # 에러 체크
-        if "error_response" in data:
-            print(f"🚫 API 호출 실패: {data['error_response'].get('msg')}")
-            return []
-
         if "aliexpress_affiliate_product_query_response" in data:
             result = data["aliexpress_affiliate_product_query_response"]["resp_result"]["result"]
             return result["products"]["product"]
             
-        print("상품 데이터가 없습니다.")
         return []
     except Exception as e:
         print(f"Request Error: {e}")
         return []
 
 def generate_blog_content(product):
-    prompt = f"""
+    # 구글 라이브러리 대신 직접 REST API 호출 (가장 확실한 방법)
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+    
+    headers = {'Content-Type': 'application/json'}
+    
+    prompt_text = f"""
     You are a professional tech reviewer. Write a short, engaging blog post review in English for:
     Product: {product.get('product_title')}
     Price: ${product.get('target_sale_price')}
@@ -84,11 +75,26 @@ def generate_blog_content(product):
     
     Format using Markdown. Include pros, features, and a conclusion.
     """
+    
+    payload = {
+        "contents": [{
+            "parts": [{"text": prompt_text}]
+        }]
+    }
+    
     try:
-        response = model.generate_content(prompt)
-        return response.text
+        response = requests.post(url, headers=headers, json=payload)
+        result = response.json()
+        
+        # 응답 파싱
+        if "candidates" in result and result["candidates"]:
+            return result["candidates"][0]["content"]["parts"][0]["text"]
+        else:
+            print(f"Gemini API Error details: {result}")
+            return None
+            
     except Exception as e:
-        print(f"Gemini Error: {e}")
+        print(f"Gemini Request Error: {e}")
         return None
 
 def main():
