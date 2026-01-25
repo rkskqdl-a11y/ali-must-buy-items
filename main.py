@@ -13,50 +13,39 @@ ALI_SECRET = os.environ.get("ALI_SECRET", "").strip()
 ALI_TRACKING_ID = os.environ.get("ALI_TRACKING_ID", "").strip()
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
 
-# 2. 폭탄급 키워드 생성기 (약 2,500개 조합)
 def get_explosive_keywords():
-    modifiers = [
-        "Best", "Top Rated", "Portable", "Wireless", "Gaming", "Smart", "Gift for Her", "Gift for Him", 
-        "Trending", "Must Have", "Budget", "Premium", "2026 New", "High Quality", "Minimalist", "Ultra", 
-        "Mini", "Professional", "Waterproof", "Ergonomic", "Xiaomi Style", "Anker Style", "Tech", "Luxury", "Outdoor"
-    ]
-    products = [
-        "Mechanical Keyboard", "Gaming Mouse", "Power Bank", "USB-C Hub", "GaN Charger", "Wireless Charger", 
-        "Smart Watch", "Projector", "Robot Vacuum", "Camping Lantern", "TWS Earbuds", "Headphones", 
-        "SSD Enclosure", "Monitor Light", "Laptop Stand", "Smartphone Gimbal", "Action Camera", "Dash Cam", 
-        "Portable Fan", "Electric Toothbrush", "Smart Scale", "Massage Gun", "Air Purifier", "Bluetooth Speaker", 
-        "Vertical Mouse", "Night Light", "Electric Kettle", "Digital Clock", "Car Vacuum", "Survival Kit",
-        "EDC Tool", "Backpack", "iPad Case", "Cable Organizer", "Selfie Stick", "Phone Holder", "Bicycle Light"
-    ]
-    return [f"{m} {p}" for m in modifiers for p in products]
+    # 더 넓은 범위를 잡기 위해 키워드를 더 일반화했습니다.
+    categories = ["Home Gadget", "Tech Accessory", "Smart Office", "Kitchen Tool", "Outdoor Gear", "Gaming Gear"]
+    modifiers = ["Best", "Top", "Essential", "New", "Cool", "Smart", "Portable", "Must Buy"]
+    return [f"{m} {c}" for m in modifiers for c in categories]
 
 def get_ali_products(keyword):
     url = "https://api-sg.aliexpress.com/sync"
     params = {
         "app_key": ALI_APP_KEY, "timestamp": str(int(time.time() * 1000)), "sign_method": "sha256",
         "method": "aliexpress.affiliate.product.query", "partner_id": "apidoc", "keywords": keyword,
-        "target_currency": "USD", "target_language": "EN", "tracking_id": ALI_TRACKING_ID, "page_size": "20"
+        "target_currency": "USD", "target_language": "EN", "tracking_id": ALI_TRACKING_ID,
+        "page_size": "50" # 🎯 한 번에 50개를 불러와서 후보를 늘립니다!
     }
     sorted_params = sorted(params.items())
     base_string = "".join([f"{k}{v}" for k, v in sorted_params])
     sign = hmac.new(ALI_SECRET.encode('utf-8'), base_string.encode('utf-8'), hashlib.sha256).hexdigest().upper()
     params["sign"] = sign
     try:
-        response = requests.post(url, data=params)
+        response = requests.post(url, data=params, timeout=20)
         return response.json().get("aliexpress_affiliate_product_query_response", {}).get("resp_result", {}).get("result", {}).get("products", {}).get("product", [])
     except: return []
 
 def generate_blog_content(product):
-    # 제미나이 3.0의 추론 능력을 활용한 고퀄리티 리뷰 생성
+    # 제미나이 3.0 Flash는 Pro급 성능이면서도 속도가 빠릅니다.
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key={GEMINI_API_KEY}"
     headers = {'Content-Type': 'application/json'}
-    prompt_text = (f"Review this product with Gemini 3.0 Reasoning: {product.get('product_title')}. "
-                   f"Price: ${product.get('target_sale_price')}. Write an expert English review in Markdown.")
+    prompt_text = (f"Review this product professionally: {product.get('product_title')}. "
+                   f"Price: ${product.get('target_sale_price')}. Write an expert review in Markdown.")
     payload = {"contents": [{"parts": [{"text": prompt_text}]}]}
     try:
         response = requests.post(url, headers=headers, json=payload, timeout=60)
-        result = response.json()
-        return result["candidates"][0]["content"]["parts"][0]["text"]
+        return response.json()["candidates"][0]["content"]["parts"][0]["text"]
     except: return None
 
 def main():
@@ -70,25 +59,29 @@ def main():
     random.shuffle(all_keywords)
     
     success_count = 0
-    # 🎯 하루 40개 포스팅 목표
+    # 🎯 40개 채울 때까지 멈추지 않습니다!
     for target_keyword in all_keywords:
         if success_count >= 40: break
         
-        print(f"🔍 Searching for: {target_keyword} ({success_count+1}/40)")
+        print(f"🔍 Searching for: {target_keyword} (Current: {success_count}/40)")
         products = get_ali_products(target_keyword)
         
+        # 🔄 키워드 하나에서 찾은 모든 상품(50개)을 하나씩 검사합니다.
         for product in products:
+            if success_count >= 40: break
+            
             p_id = str(product.get('product_id'))
-            if p_id in posted_ids: continue
+            if p_id in posted_ids: continue # 이미 올린 것만 패스
             
             content = generate_blog_content(product)
             if content:
                 today = datetime.now().strftime("%Y-%m-%d")
-                # 파일명 중복 방지를 위한 ID 포함
                 file_path = f"_posts/{today}-{p_id}.md"
                 
-                # 🖼️ 이미지 및 🛒 버튼 디자인 통합
-                img_url = product.get('product_main_image_url')
+                # 🖼️ 이미지 URL 최적화 (https: 강제 부여)
+                img_url = product.get('product_main_image_url', '')
+                if img_url.startswith('//'): img_url = 'https:' + img_url
+                
                 buy_url = product.get('promotion_link')
                 
                 full_markdown = f"""---
@@ -96,20 +89,17 @@ layout: post
 title: "{product['product_title']}"
 date: {today}
 ---
-
 ![Product Image]({img_url})
 
 {content}
 
 ---
-
 ### 🛒 Limited Time Offer
 <div style="text-align: center; margin: 30px 0;">
     <a href="{buy_url}" style="background-color: #ff4747; color: white; padding: 15px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 1.2em; display: inline-block;">
         Check Official Price on AliExpress →
     </a>
 </div>
-
 *Generated by Gemini 3.0 Intelligence*
 """
                 with open(file_path, "w", encoding="utf-8") as f:
@@ -120,10 +110,10 @@ date: {today}
                 
                 posted_ids.add(p_id)
                 success_count += 1
-                print(f"🎉 Created: {file_path}")
-                # API 쿼터 보호를 위한 짧은 휴식
-                time.sleep(10) 
-                break # 다음 키워드로 이동
+                print(f"🎉 SUCCESS ({success_count}/40): {p_id}")
+                time.sleep(2) # ⚡ 속도를 위해 휴식 시간을 10초 -> 2초로 줄였습니다.
+    
+    print(f"🏁 Mission Completed: {success_count} posts created.")
 
 if __name__ == "__main__":
     main()
