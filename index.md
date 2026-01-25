@@ -10,7 +10,7 @@ Welcome to our automated affiliate site! Every day, our **Gemini 3.0** AI agent 
 ## 📝 Recent Expert Reviews
 
 {% for post in site.posts %}
-* **[{{ post.date | date: "%Y-%m-%d" }}] [{{ post.title }}]({{ post.url }})**
+* **[{{ post.date | date: "%Y-%m-%d" }}] [{{ post.title }}]({{ post.url | relative_url }})**
 {% endfor %}
 
 ---
