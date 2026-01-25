@@ -87,12 +87,13 @@ def main():
     print(f"📝 Writing Review: {selected_product['product_title'][:40]}...")
     content = generate_blog_content(selected_product)
     
-    if content:
+   if content:
         today = datetime.now().strftime("%Y-%m-%d")
-        # 📝 Jekyll 규격 파일명 (목록 표시를 위해 중요)
+        # Jekyll 규격에 맞춰 _posts 폴더에 저장
         file_path = f"_posts/{today}-{selected_product.get('product_id')}.md"
         with open(file_path, "w", encoding="utf-8") as f:
-            f.write(f"---\ntitle: \"{selected_product['product_title']}\"\ndate: {today}\n---\n\n{content}")
+            # Jekyll이 인식할 수 있도록 제목과 날짜 형식을 맞춰줍니다.
+            f.write(f"---\nlayout: post\ntitle: \"{selected_product['product_title']}\"\ndate: {today}\n---\n\n{content}")
         
         with open("posted_ids.txt", "a") as f:
             f.write(f"{selected_product.get('product_id')}\n")
