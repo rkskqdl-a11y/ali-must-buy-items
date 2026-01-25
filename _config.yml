@@ -1,8 +1,11 @@
 title: Ali-Must-Buy-Items
 description: Daily handpicked AliExpress deals by Gemini 3.0
-theme: minima # 깔끔하고 전문적인 기본 테마
+theme: minima
 
-# 폴더 설정
+# ⚠️ 이 부분이 가장 중요합니다!
+baseurl: "/ali-must-buy-items" 
+url: "https://rkskqdl-a11y.github.io"
+
 collections:
   posts:
     output: true
