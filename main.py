@@ -6,22 +6,24 @@ import hashlib
 import requests
 import json
 import warnings
-# 구글 경고 메시지 무시 설정
 warnings.filterwarnings("ignore")
 import google.generativeai as genai
 from datetime import datetime
 
-# 1. 환경 변수 로드 및 디버깅
-ALI_APP_KEY = os.environ.get("ALI_APP_KEY")
-ALI_SECRET = os.environ.get("ALI_SECRET")
-ALI_TRACKING_ID = os.environ.get("ALI_TRACKING_ID")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+# 1. 환경 변수 로드 (공백 제거 기능 추가 .strip())
+ALI_APP_KEY = os.environ.get("ALI_APP_KEY", "").strip()
+ALI_SECRET = os.environ.get("ALI_SECRET", "").strip()
+ALI_TRACKING_ID = os.environ.get("ALI_TRACKING_ID", "").strip()
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
 
-# 비밀키가 제대로 로드되었는지 확인 (보안을 위해 앞자리만 출력)
-if not ALI_SECRET:
-    print("❌ 오류: ALI_SECRET이 비어있습니다. GitHub Secrets 설정을 확인하세요.")
+# 비밀키 길이 재확인
+if ALI_SECRET:
+    print(f"✅ 비밀키 로드 성공 (공백 제거 후 길이: {len(ALI_SECRET)})")
+    # 32자가 아니면 경고
+    if len(ALI_SECRET) != 32:
+        print("⚠️ 주의: App Secret 길이가 32자가 아닙니다. Secret 값을 다시 확인해보는 것이 좋습니다.")
 else:
-    print(f"✅ 비밀키 로드 성공 (길이: {len(ALI_SECRET)})")
+    print("❌ 오류: ALI_SECRET이 비어있습니다.")
 
 # 2. Gemini 설정
 genai.configure(api_key=GEMINI_API_KEY)
@@ -30,7 +32,7 @@ model = genai.GenerativeModel('gemini-pro')
 def get_ali_products(keyword):
     url = "https://api-sg.aliexpress.com/sync"
     
-    # 공통 파라미터 (IOP 규격)
+    # 공통 파라미터
     params = {
         "app_key": ALI_APP_KEY,
         "timestamp": str(int(time.time() * 1000)),
@@ -45,38 +47,32 @@ def get_ali_products(keyword):
         "page_size": "5"
     }
     
-    # 서명(Sign) 생성 - 공식 알고리즘 적용
-    # 1. 파라미터 정렬
+    # 서명 생성
     sorted_params = sorted(params.items())
-    
-    # 2. 문자열 연결 (key+value)
     base_string = ""
     for k, v in sorted_params:
         base_string += str(k) + str(v)
     
-    # 3. HMAC-SHA256 암호화
+    # HMAC-SHA256 서명
     sign = hmac.new(ALI_SECRET.encode('utf-8'), base_string.encode('utf-8'), hashlib.sha256).hexdigest().upper()
     params["sign"] = sign
     
     try:
-        # POST 요청
         response = requests.post(url, data=params)
         data = response.json()
         
-        # 에러 응답 확인
+        # 에러 체크
         if "error_response" in data:
-            print(f"🚫 API 호출 실패: {data['error_response'].get('msg', '알 수 없는 오류')}")
-            print(f"상세 내용: {data}")
+            print(f"🚫 API 호출 실패: {data['error_response'].get('msg')}")
+            # 에러 발생 시 fallback으로 한 번 더 시도 (다른 서명 방식)
             return []
-            
+
         if "aliexpress_affiliate_product_query_response" in data:
             result = data["aliexpress_affiliate_product_query_response"]["resp_result"]["result"]
-            if result and "products" in result:
-                return result["products"]["product"]
-        
-        print("상품을 찾을 수 없습니다.")
+            return result["products"]["product"]
+            
+        print("상품 데이터가 없습니다.")
         return []
-        
     except Exception as e:
         print(f"Request Error: {e}")
         return []
@@ -99,7 +95,6 @@ def generate_blog_content(product):
         return None
 
 def main():
-    # 키워드 파일 읽기
     try:
         with open("keywords.txt", "r", encoding="utf-8") as f:
             keywords = [line.strip() for line in f if line.strip()]
@@ -120,7 +115,6 @@ def main():
         print("❌ 상품 검색 실패 - 프로그램을 종료합니다.")
         return
 
-    # 이미 올린 상품 제외
     posted_ids = set()
     if os.path.exists("posted_ids.txt"):
         with open("posted_ids.txt", "r") as f:
