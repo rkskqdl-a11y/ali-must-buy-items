@@ -1,0 +1,9 @@
+title: Ali-Must-Buy-Items
+description: Daily handpicked AliExpress deals by Gemini 3.0
+theme: minima # 깔끔하고 전문적인 기본 테마
+
+# 폴더 설정
+collections:
+  posts:
+    output: true
+    permalink: /:year/:month/:day/:title.html
