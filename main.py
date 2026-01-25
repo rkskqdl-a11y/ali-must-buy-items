@@ -35,14 +35,8 @@ def get_ali_products(keyword):
     except: return []
 
 def generate_blog_content(product):
-    # 🚀 사용자님 리스트에서 확인된 모델 중 가장 성공 가능성이 높은 순서입니다.
-    # 제미나이 3.0은 추론 능력이 뛰어나 리뷰의 질이 훨씬 높습니다.
-    candidates = [
-        "models/gemini-3-flash-preview", # 1순위: 지난번 성공 모델
-        "models/gemini-2.0-flash",       # 2순위: 최신 플래시 모델
-        "models/gemini-flash-latest"     # 3순위: 안정적인 최신 버전
-    ]
-    
+    # 🚀 제미나이 3.0 Flash 엔진 호출 (가장 안정적)
+    candidates = ["models/gemini-3-flash-preview", "models/gemini-2.0-flash", "models/gemini-1.5-flash"]
     headers = {'Content-Type': 'application/json'}
     prompt_text = (f"Review this product with Gemini 3.0 Reasoning: {product.get('product_title')}. "
                    f"Price: ${product.get('target_sale_price')}. Write in expert English Markdown.")
@@ -51,29 +45,20 @@ def generate_blog_content(product):
     for model_name in candidates:
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/{model_name}:generateContent?key={GEMINI_API_KEY}"
-            # ⏳ 타임아웃을 60초로 늘려 서버 지연 에러를 방지합니다.
             response = requests.post(url, headers=headers, json=payload, timeout=60)
             result = response.json()
-            
             if "candidates" in result:
-                print(f"✅ Success using model: {model_name}")
                 return result["candidates"][0]["content"]["parts"][0]["text"]
-            
-            print(f"ℹ️ Model {model_name} skipped: {result.get('error', {}).get('message', 'Unknown error')}")
-        except requests.exceptions.Timeout:
-            print(f"⚠️ Timeout occurred with {model_name}, trying next model...")
-            continue
-        except Exception as e:
-            print(f"ℹ️ Error with {model_name}: {e}")
-            continue
+        except: continue
     return None
 
 def main():
-    # 📂 Jekyll 웹사이트 연동을 위해 반드시 '_posts' 폴더를 사용합니다.
+    # 📂 1. Jekyll 웹사이트 연동을 위한 폴더 생성
     os.makedirs("_posts", exist_ok=True)
     if not os.path.exists("posted_ids.txt"):
         with open("posted_ids.txt", "w") as f: f.write("")
 
+    # 2. 키워드 및 상품 검색
     all_keywords = get_massive_keyword_list()
     target = random.choice(all_keywords)
     print(f"🎯 Target: {target}")
@@ -85,21 +70,25 @@ def main():
 
     selected_product = products[0]
     print(f"📝 Writing Review: {selected_product['product_title'][:40]}...")
+    
+    # 3. 제미나이 3.0 글 생성
     content = generate_blog_content(selected_product)
     
-   if content:
+    # ⚠️ 이 부분의 들여쓰기를 엄격히 맞췄습니다.
+    if content:
         today = datetime.now().strftime("%Y-%m-%d")
-        # Jekyll 규격에 맞춰 _posts 폴더에 저장
+        # Jekyll 규격 파일명 설정
         file_path = f"_posts/{today}-{selected_product.get('product_id')}.md"
-        with open(file_path, "w", encoding="utf-8") as f:
-            # Jekyll이 인식할 수 있도록 제목과 날짜 형식을 맞춰줍니다.
-            f.write(f"---\nlayout: post\ntitle: \"{selected_product['product_title']}\"\ndate: {today}\n---\n\n{content}")
         
+        with open(file_path, "w", encoding="utf-8") as f:
+            # 404 에러 방지 및 목록 표시를 위한 Front Matter 추가
+            f.write(f"---\nlayout: post\ntitle: \"{selected_product['product_title']}\"\ndate: {today}\n---\n\n{content}")
+            
         with open("posted_ids.txt", "a") as f:
             f.write(f"{selected_product.get('product_id')}\n")
         print(f"🎉 SUCCESS: {file_path} created!")
     else:
-        print("❌ All Gemini models failed to generate content.")
+        print("❌ Content generation failed.")
 
 if __name__ == "__main__":
     main()
