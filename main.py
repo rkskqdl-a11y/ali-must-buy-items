@@ -7,13 +7,14 @@ import requests
 import json
 from datetime import datetime
 
-# 1. 환경 변수 설정
+# 1. 환경 변수 설정 (GitHub Secrets 기반)
 ALI_APP_KEY = os.environ.get("ALI_APP_KEY", "").strip()
 ALI_SECRET = os.environ.get("ALI_SECRET", "").strip()
 ALI_TRACKING_ID = os.environ.get("ALI_TRACKING_ID", "").strip()
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
 
 def get_ali_products():
+    # 상품 고갈 방지를 위해 8개의 대형 카테고리 활용
     cat_ids = ["502", "44", "7", "509", "1501", "1503", "18", "1511"]
     cat_id = random.choice(cat_ids)
     url = "https://api-sg.aliexpress.com/sync"
@@ -32,17 +33,17 @@ def get_ali_products():
     except: return []
 
 def generate_blog_content(product):
-    # ⚡ 제미나이 1.5 플래시 사용
+    # 제미나이 1.5 플래시: 안정성 최우선 세팅
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
     headers = {'Content-Type': 'application/json'}
-    prompt = f"Write a professional 5-sentence product review for: {product.get('product_title')}. Use Markdown."
+    prompt = f"Write a professional 5-sentence review for: {product.get('product_title')}. Use Markdown."
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
     try:
         response = requests.post(url, headers=headers, json=payload, timeout=40)
         res_json = response.json()
         if "candidates" in res_json:
             return res_json["candidates"][0]["content"]["parts"][0]["text"]
-        # 할당량 초과 시 70초 휴식 (더 넉넉하게 설정)
+        # 할당량 초과 시 70초 휴식 (Quota 제어)
         if "quota" in str(res_json).lower() or "429" in str(res_json):
             print("   ⏳ API Quota hit. Resting 70s...")
             time.sleep(70)
@@ -55,13 +56,10 @@ def main():
     current_session_ids = set()
     success_count = 0
     
-    # ✅ 영문 전용 대가성 문구
-    disclosure_text = (
-        "> **Affiliate Disclosure:** As an AliExpress Associate, I earn from qualifying purchases. "
-        "This post contains affiliate links, which means I may receive a small commission at no extra cost to you.\n\n"
-    )
+    # 영문 전용 수익 고지 문구
+    disclosure = "> **Affiliate Disclosure:** As an AliExpress Associate, I earn from qualifying purchases. This post contains affiliate links.\n\n"
 
-    print(f"🚀 Mission Start: 40 Posts (Image Policy Fix Applied)")
+    print(f"🚀 Mission Start: 40 Posts for {today_str}")
 
     while success_count < 40:
         products = get_ali_products()
@@ -72,30 +70,26 @@ def main():
             p_id = str(p.get('product_id'))
             if p_id in current_session_ids: continue
             
-            # 🖼️ 이미지 URL 최적화 및 보안 정책 우회
+            # 🖼️ 이미지 보안 정책 우회 및 HTTPS 강제
             img_url = p.get('product_main_image_url', '').strip()
             if img_url.startswith('//'): img_url = 'https:' + img_url
-            img_url = img_url.split('?')[0] # 불필요한 추적 코드 제거
+            img_url = img_url.split('?')[0] # 쿼리 제거
 
             content = generate_blog_content(p)
             
-            # ✅ AI 실패 시에도 풍부한 내용을 보장하는 '구조화된 본문'
+            # AI 실패 시 구조화된 표로 본문 자동 생성
             if not content:
-                print(f"   ⚠️ AI generation failed for {p_id}. Using Structured Fallback.")
-                content = (f"### Product Overview\n"
-                           f"This high-quality **{p.get('product_title')}** is one of the most popular items in its category. "
-                           f"It offers exceptional value and performance for its price point.\n\n"
-                           f"| Attribute | Details |\n"
+                content = (f"### Product Info\n"
+                           f"| Property | Detail |\n"
                            f"| :--- | :--- |\n"
-                           f"| **Product Name** | {p.get('product_title')} |\n"
-                           f"| **Special Price** | ${p.get('target_sale_price')} |\n"
-                           f"| **Rating** | ★★★★☆ (Highly Recommended) |")
+                           f"| **Item** | {p.get('product_title')} |\n"
+                           f"| **Price** | ${p.get('target_sale_price')} |\n"
+                           f"| **Status** | Highly Recommended |")
 
             file_path = f"_posts/{today_str}-{p_id}.md"
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(f"---\nlayout: post\ntitle: \"{p['product_title']}\"\ndate: {today_str}\n---\n\n"
-                        f"{disclosure_text}"
-                        f"\n"
+                        f"{disclosure}"
                         f"<img src=\"{img_url}\" alt=\"{p['product_title']}\" referrerpolicy=\"no-referrer\" style=\"width:100%; max-width:600px; display:block; margin:20px 0;\">\n\n"
                         f"{content}\n\n"
                         f"### [🛒 Shop Now on AliExpress]({p.get('promotion_link')})")
@@ -103,9 +97,9 @@ def main():
             current_session_ids.add(p_id)
             success_count += 1
             print(f"   ✅ SUCCESS ({success_count}/40): {p_id}")
-            time.sleep(6) # API 안정성을 위해 간격을 6초로 늘림
+            time.sleep(6) # API 안정성 확보 시간
 
-    print(f"🏁 Mission Completed: 40 professional posts created.")
+    print(f"🏁 Mission Completed: 40 posts created.")
 
 if __name__ == "__main__":
     main()
