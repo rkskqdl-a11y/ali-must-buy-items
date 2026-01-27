@@ -14,7 +14,6 @@ ALI_TRACKING_ID = os.environ.get("ALI_TRACKING_ID", "").strip()
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
 
 def get_ali_products():
-    # 8개의 대형 카테고리 활용
     cat_ids = ["502", "44", "7", "509", "1501", "1503", "18", "1511"]
     cat_id = random.choice(cat_ids)
     url = "https://api-sg.aliexpress.com/sync"
@@ -44,7 +43,6 @@ def generate_blog_content(product):
         if "candidates" in res_json:
             return res_json["candidates"][0]["content"]["parts"][0]["text"]
         if "quota" in str(res_json).lower() or "429" in str(res_json):
-            print("   ⏳ API Quota hit. Resting 70s...")
             time.sleep(70)
     except: pass
     return None
@@ -58,7 +56,7 @@ def main():
     # 영문 전용 수익 고지 문구
     disclosure = "> **Affiliate Disclosure:** As an AliExpress Associate, I earn from qualifying purchases. This post contains affiliate links.\n\n"
 
-    print(f"🚀 Manual Execution Start: Target 40 Posts for {today_str}")
+    print(f"🚀 Mission: 40 Posts (Final Table Formatting Fix)")
 
     while success_count < 40:
         products = get_ali_products()
@@ -69,27 +67,32 @@ def main():
             p_id = str(p.get('product_id'))
             if p_id in current_session_ids: continue
             
-            # 🖼️ 이미지 보안 정책 우회 및 HTTPS 강제
+            # 이미지 보정
             img_url = p.get('product_main_image_url', '').strip()
             if img_url.startswith('//'): img_url = 'https:' + img_url
-            img_url = img_url.split('?')[0] # 쿼리 제거
+            img_url = img_url.split('?')[0]
 
             content = generate_blog_content(p)
             
-            # ✅ 표 형식이 깨지지 않도록 삼중 따옴표 구문으로 수정
+            # ✅ [수정 핵심] 표가 박스에 들어가도록 삼중 따옴표와 빈 줄을 추가합니다.
             if not content:
-                content = f"""### Product Info
+                # 앞뒤로 \n\n을 넣어 다른 텍스트와 확실히 분리합니다.
+                content = f"""
+### Product Specifications
+
 | Property | Detail |
 | :--- | :--- |
 | **Item** | {p.get('product_title')} |
 | **Price** | ${p.get('target_sale_price')} |
 | **Status** | Highly Recommended |
+
 """
 
             file_path = f"_posts/{today_str}-{p_id}.md"
             with open(file_path, "w", encoding="utf-8") as f:
+                # 파일 전체 구조를 재정비하여 줄바꿈 오차를 없앱니다.
                 f.write(f"---\nlayout: post\ntitle: \"{p['product_title']}\"\ndate: {today_str}\n---\n\n"
-                        f"{disclosure}"
+                        f"{disclosure}\n"
                         f"<img src=\"{img_url}\" alt=\"{p['product_title']}\" referrerpolicy=\"no-referrer\" style=\"width:100%; max-width:600px; display:block; margin:20px 0;\">\n\n"
                         f"{content}\n\n"
                         f"### [🛒 Shop Now on AliExpress]({p.get('promotion_link')})")
@@ -97,9 +100,9 @@ def main():
             current_session_ids.add(p_id)
             success_count += 1
             print(f"   ✅ SUCCESS ({success_count}/40): {p_id}")
-            time.sleep(6) # API 안정성 확보 시간
+            time.sleep(6)
 
-    print(f"🏁 Manual Mission Completed: 40 posts created.")
+    print(f"🏁 Mission Completed!")
 
 if __name__ == "__main__":
     main()
