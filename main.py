@@ -12,7 +12,6 @@ ALI_APP_KEY = os.environ.get("ALI_APP_KEY", "").strip()
 ALI_SECRET = os.environ.get("ALI_SECRET", "").strip()
 ALI_TRACKING_ID = os.environ.get("ALI_TRACKING_ID", "").strip()
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
-# [필독] 본인의 실제 GitHub Pages 주소로 수정하세요 (끝에 / 제외)
 SITE_URL = "https://rkskqdl-a11y.github.io/ali-must-buy-items"
 
 ID_LOG_FILE = "posted_ids.txt"
@@ -42,8 +41,8 @@ def get_ali_products():
     params["sign"] = sign
     try:
         response = requests.post(url, data=params, timeout=20)
-        return response.json().get("aliexpress_affiliate_product_query_response", {}).get("resp_result", {}).get("result", {}).get("products", {}).get("product",)
-    except: return
+        return response.json().get("aliexpress_affiliate_product_query_response", {}).get("resp_result", {}).get("result", {}).get("products", {}).get("product", [])
+    except: return []
 
 def generate_blog_content(product):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
@@ -54,26 +53,24 @@ def generate_blog_content(product):
         response = requests.post(url, headers=headers, json=payload, timeout=40)
         res_json = response.json()
         if "candidates" in res_json:
-            return res_json["candidates"]["content"]["parts"]["text"]
+            # ✅ 경로 인덱스 수정
+            return res_json["candidates"][0]["content"]["parts"][0]["text"]
     except: pass
     return None
 
 def update_seo_files():
-    """사이트맵과 robots.txt를 최신 포스트 기반으로 생성"""
     posts = sorted([f for f in os.listdir("_posts") if f.endswith(".md")], reverse=True)
     now = datetime.now().strftime("%Y-%m-%d")
     
-    # Sitemap.xml 생성 (절대 주소 기반)
     sitemap = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
     sitemap += f'  <url><loc>{SITE_URL}/</loc><lastmod>{now}</lastmod><priority>1.0</priority></url>\n'
     for p in posts:
-        # Jekyll URL 형식에 맞춰 파일명 가공 (예: 2026-01-28-123.md -> /2026-01-28-123.html)
+        # ✅ URL 가공 시 연/월/일 폴더 구조가 있다면 그에 맞춰 수정 필요
         url_name = p.replace(".md", ".html")
         sitemap += f'  <url><loc>{SITE_URL}/{url_name}</loc><lastmod>{now}</lastmod></url>\n'
     sitemap += '</urlset>'
     with open("sitemap.xml", "w", encoding="utf-8") as f: f.write(sitemap)
     
-    # robots.txt 생성
     robots = f"User-agent: *\nAllow: /\nSitemap: {SITE_URL}/sitemap.xml"
     with open("robots.txt", "w", encoding="utf-8") as f: f.write(robots)
 
@@ -85,8 +82,6 @@ def main():
     max_posts = 10 
     
     disclosure = "> **Affiliate Disclosure:** As an AliExpress Associate, I earn from qualifying purchases. This post contains affiliate links.\n\n"
-
-    print(f"🚀 Mission: {max_posts} Posts Start")
 
     while success_count < max_posts:
         products = get_ali_products()
@@ -101,11 +96,11 @@ def main():
             
             img_url = p.get('product_main_image_url', '').strip()
             if img_url.startswith('//'): img_url = 'https:' + img_url
-            img_url = img_url.split('?') 
+            img_url = img_url.split('?')[0] # ✅ 리스트가 아닌 문자열로 수정
 
             content = generate_blog_content(p)
             if not content:
-                content = f"### Product Specifications\n\n| Attribute | Detail |\n| :--- | :--- |\n| **Item** | {p.get('product_title')} |\n| **Price** | ${p.get('target_sale_price')} |\n"
+                content = f"### Product Info\n\n| Attribute | Detail |\n| :--- | :--- |\n| **Item** | {p.get('product_title')} |\n| **Price** | ${p.get('target_sale_price')} |\n"
 
             file_path = f"_posts/{today_str}-{p_id}.md"
             with open(file_path, "w", encoding="utf-8") as f:
@@ -113,16 +108,15 @@ def main():
                         f"{disclosure}"
                         f"<img src=\"{img_url}\" alt=\"{p['product_title']}\" referrerpolicy=\"no-referrer\" style=\"width:100%; max-width:600px; display:block; margin:20px 0;\">\n\n"
                         f"{content}\n\n"
-                        f"###({p.get('promotion_link')})")
+                        f"### [🛒 Shop Now on AliExpress]({p.get('promotion_link')})") # ✅ 마크다운 링크 수정
             
             save_posted_id(p_id)
             posted_ids.add(p_id)
             success_count += 1
             print(f"   ✅ SUCCESS ({success_count}/{max_posts}): {p_id}")
-            time.sleep(6) # Gemini RPM 제한(15) 준수
+            time.sleep(6)
 
-    update_seo_files() # 실행 완료 후 SEO 파일 갱신
-    print(f"🏁 Mission Completed & SEO Files Updated!")
+    update_seo_files()
 
 if __name__ == "__main__":
     main()
