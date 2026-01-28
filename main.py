@@ -7,12 +7,11 @@ import requests
 import json
 from datetime import datetime
 
-# 1. 환경 변수 및 사이트 정보 설정
+# 1. 환경 변수 및 설정
 ALI_APP_KEY = os.environ.get("ALI_APP_KEY", "").strip()
-ALI_SECRET = os.environ.get("ALI_SECRET", "").strip() # YAML에서 ALI_APP_SECRET을 매핑해줍니다.
+ALI_SECRET = os.environ.get("ALI_SECRET", "").strip()
 ALI_TRACKING_ID = os.environ.get("ALI_TRACKING_ID", "").strip()
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
-# 실제 GitHub Pages 주소 (Jekyll 블로그 주소)
 SITE_URL = "https://rkskqdl-a11y.github.io/ali-must-buy-items"
 
 ID_LOG_FILE = "posted_ids.txt"
@@ -28,26 +27,37 @@ def save_posted_id(p_id):
         f.write(f"{p_id}\n")
 
 def get_ali_products():
-    """알리익스프레스 API를 통해 상품 정보를 수집합니다."""
-    cat_ids = ["502", "44", "7", "509", "1501", "1503", "18", "1511"]
+    """다양한 카테고리를 랜덤하게 선택하여 모든 상품군을 커버합니다."""
+    # ✅ 알리익스프레스 주요 카테고리 ID 전체 목록 확장
+    # 3:의류, 1501:가정/정원, 34:자동차, 66:뷰티, 7:컴퓨터, 44:가전, 1503:가구, 
+    # 26:완구/취미, 1524:시계, 200000532:스포츠, 15:반려동물/공구, 2:유아용품
+    cat_ids = [
+        "3", "1501", "34", "66", "7", "44", "502", "1503", "1511", "18", 
+        "509", "200000343", "200000345", "200000532", "26", "15", "2", "1524", "21", "13"
+    ]
     cat_id = random.choice(cat_ids)
+    
     url = "https://api-sg.aliexpress.com/sync"
     params = {
         "app_key": ALI_APP_KEY, "timestamp": str(int(time.time() * 1000)), "sign_method": "sha256",
         "method": "aliexpress.affiliate.product.query", "category_ids": cat_id, 
         "page_size": "50", "target_currency": "USD", "target_language": "EN", "tracking_id": ALI_TRACKING_ID
     }
+    # 정렬 방식을 랜덤화하여 상품의 다양성 극대화 (VOLUME_DESC, SALE_PRICE_ASC 등 랜덤 선택 가능)
+    sort_options = ["VOLUME_DESC", "SALE_PRICE_ASC", "SALE_PRICE_DESC", "LAST_VOLUME_ASC"]
+    params["sort"] = random.choice(sort_options)
+
     sorted_params = sorted(params.items())
     base_string = "".join([f"{k}{v}" for k, v in sorted_params])
     sign = hmac.new(ALI_SECRET.encode('utf-8'), base_string.encode('utf-8'), hashlib.sha256).hexdigest().upper()
     params["sign"] = sign
+    
     try:
         response = requests.post(url, data=params, timeout=20)
         return response.json().get("aliexpress_affiliate_product_query_response", {}).get("resp_result", {}).get("result", {}).get("products", {}).get("product", [])
     except: return []
 
 def generate_blog_content(product):
-    """제미나이를 사용하여 고품질 리뷰를 생성하고 할당량을 관리합니다."""
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
     headers = {'Content-Type': 'application/json'}
     prompt = f"Write a professional 5-sentence review for: {product.get('product_title')}. Use Markdown."
@@ -57,7 +67,6 @@ def generate_blog_content(product):
         res_json = response.json()
         if "candidates" in res_json:
             return res_json["candidates"][0]["content"]["parts"][0]["text"]
-        # API 할당량 초과 시 대기 로직
         if "quota" in str(res_json).lower() or "429" in str(res_json):
             print("   ⏳ API Quota limit. Resting 70s...")
             time.sleep(70)
@@ -65,25 +74,19 @@ def generate_blog_content(product):
     return None
 
 def update_seo_files():
-    """구글이 인덱스를 생성할 수 있도록 폴더 구조에 맞춘 사이트맵을 만듭니다."""
     posts = sorted([f for f in os.listdir("_posts") if f.endswith(".md")], reverse=True)
     now = datetime.now().strftime("%Y-%m-%d")
-    
     sitemap = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
     sitemap += f'  <url><loc>{SITE_URL}/</loc><lastmod>{now}</lastmod><priority>1.0</priority></url>\n'
-    
     for p in posts:
-        # 파일명(2026-01-28-ID.md) -> Jekyll 주소(/2026/01/28/ID.html) 변환
         name_parts = p.replace(".md", "").split("-")
         if len(name_parts) >= 4:
             year, month, day = name_parts[0], name_parts[1], name_parts[2]
             title_id = "-".join(name_parts[3:])
             loc_url = f"{SITE_URL}/{year}/{month}/{day}/{title_id}.html"
             sitemap += f'  <url><loc>{loc_url}</loc><lastmod>{now}</lastmod></url>\n'
-            
     sitemap += '</urlset>'
     with open("sitemap.xml", "w", encoding="utf-8") as f: f.write(sitemap)
-    # robots.txt 최신화
     with open("robots.txt", "w", encoding="utf-8") as f:
         f.write(f"User-agent: *\nAllow: /\nSitemap: {SITE_URL}/sitemap.xml")
 
@@ -92,7 +95,7 @@ def main():
     today_str = datetime.now().strftime("%Y-%m-%d")
     posted_ids = load_posted_ids()
     success_count = 0
-    max_posts = 10 # 한 번에 발행할 수량
+    max_posts = 10 
     disclosure = "> **Affiliate Disclosure:** As an AliExpress Associate, I earn from qualifying purchases.\n\n"
 
     print(f"🚀 Mission Start: {max_posts} Posts for {today_str}")
@@ -108,14 +111,11 @@ def main():
             p_id = str(p.get('product_id'))
             if p_id in posted_ids: continue
             
-            # 이미지 엑박 방지 로직
             img_url = p.get('product_main_image_url', '').strip()
             if img_url.startswith('//'): img_url = 'https:' + img_url
             img_url = img_url.split('?')[0]
 
             content = generate_blog_content(p)
-            
-            # [표 깨짐 방지] 삼중 따옴표와 빈 줄 보장
             if not content:
                 content = (
                     "\n\n### Product Specifications\n\n"
@@ -138,9 +138,9 @@ def main():
             posted_ids.add(p_id)
             success_count += 1
             print(f"   ✅ SUCCESS ({success_count}/{max_posts}): {p_id}")
-            time.sleep(6) # RPM 관리
+            time.sleep(6)
 
-    update_seo_files() # 모든 글 생성 후 사이트맵 갱신
+    update_seo_files()
     print(f"🏁 Mission Completed & SEO Files Updated!")
 
 if __name__ == "__main__":
