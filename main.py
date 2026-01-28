@@ -7,11 +7,12 @@ import requests
 import json
 from datetime import datetime
 
-# 1. 환경 변수 설정 (사용자 정보 기반)
+# 1. 환경 변수 및 사이트 정보 설정
 ALI_APP_KEY = os.environ.get("ALI_APP_KEY", "").strip()
-ALI_SECRET = os.environ.get("ALI_SECRET", "").strip()
+ALI_SECRET = os.environ.get("ALI_SECRET", "").strip() # YAML에서 ALI_APP_SECRET을 매핑해줍니다.
 ALI_TRACKING_ID = os.environ.get("ALI_TRACKING_ID", "").strip()
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
+# 실제 GitHub Pages 주소 (Jekyll 블로그 주소)
 SITE_URL = "https://rkskqdl-a11y.github.io/ali-must-buy-items"
 
 ID_LOG_FILE = "posted_ids.txt"
@@ -27,6 +28,7 @@ def save_posted_id(p_id):
         f.write(f"{p_id}\n")
 
 def get_ali_products():
+    """알리익스프레스 API를 통해 상품 정보를 수집합니다."""
     cat_ids = ["502", "44", "7", "509", "1501", "1503", "18", "1511"]
     cat_id = random.choice(cat_ids)
     url = "https://api-sg.aliexpress.com/sync"
@@ -45,6 +47,7 @@ def get_ali_products():
     except: return []
 
 def generate_blog_content(product):
+    """제미나이를 사용하여 고품질 리뷰를 생성하고 할당량을 관리합니다."""
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
     headers = {'Content-Type': 'application/json'}
     prompt = f"Write a professional 5-sentence review for: {product.get('product_title')}. Use Markdown."
@@ -54,11 +57,15 @@ def generate_blog_content(product):
         res_json = response.json()
         if "candidates" in res_json:
             return res_json["candidates"][0]["content"]["parts"][0]["text"]
+        # API 할당량 초과 시 대기 로직
+        if "quota" in str(res_json).lower() or "429" in str(res_json):
+            print("   ⏳ API Quota limit. Resting 70s...")
+            time.sleep(70)
     except: pass
     return None
 
 def update_seo_files():
-    """Jekyll의 permalink 구조에 맞춰 사이트맵 생성"""
+    """구글이 인덱스를 생성할 수 있도록 폴더 구조에 맞춘 사이트맵을 만듭니다."""
     posts = sorted([f for f in os.listdir("_posts") if f.endswith(".md")], reverse=True)
     now = datetime.now().strftime("%Y-%m-%d")
     
@@ -66,7 +73,7 @@ def update_seo_files():
     sitemap += f'  <url><loc>{SITE_URL}/</loc><lastmod>{now}</lastmod><priority>1.0</priority></url>\n'
     
     for p in posts:
-        # 파일명(2026-01-28-ID.md)을 주소 형식(/2026/01/28/ID.html)으로 변환
+        # 파일명(2026-01-28-ID.md) -> Jekyll 주소(/2026/01/28/ID.html) 변환
         name_parts = p.replace(".md", "").split("-")
         if len(name_parts) >= 4:
             year, month, day = name_parts[0], name_parts[1], name_parts[2]
@@ -76,6 +83,7 @@ def update_seo_files():
             
     sitemap += '</urlset>'
     with open("sitemap.xml", "w", encoding="utf-8") as f: f.write(sitemap)
+    # robots.txt 최신화
     with open("robots.txt", "w", encoding="utf-8") as f:
         f.write(f"User-agent: *\nAllow: /\nSitemap: {SITE_URL}/sitemap.xml")
 
@@ -84,25 +92,30 @@ def main():
     today_str = datetime.now().strftime("%Y-%m-%d")
     posted_ids = load_posted_ids()
     success_count = 0
-    max_posts = 10 
+    max_posts = 10 # 한 번에 발행할 수량
     disclosure = "> **Affiliate Disclosure:** As an AliExpress Associate, I earn from qualifying purchases.\n\n"
+
+    print(f"🚀 Mission Start: {max_posts} Posts for {today_str}")
 
     while success_count < max_posts:
         products = get_ali_products()
-        if not products: continue
+        if not products: 
+            time.sleep(10)
+            continue
             
         for p in products:
             if success_count >= max_posts: break
             p_id = str(p.get('product_id'))
             if p_id in posted_ids: continue
             
+            # 이미지 엑박 방지 로직
             img_url = p.get('product_main_image_url', '').strip()
             if img_url.startswith('//'): img_url = 'https:' + img_url
             img_url = img_url.split('?')[0]
 
             content = generate_blog_content(p)
             
-            # ✅ [표 깨짐 방지] 앞뒤로 빈 줄(\n\n)을 추가합니다.
+            # [표 깨짐 방지] 삼중 따옴표와 빈 줄 보장
             if not content:
                 content = (
                     "\n\n### Product Specifications\n\n"
@@ -125,9 +138,10 @@ def main():
             posted_ids.add(p_id)
             success_count += 1
             print(f"   ✅ SUCCESS ({success_count}/{max_posts}): {p_id}")
-            time.sleep(6)
+            time.sleep(6) # RPM 관리
 
-    update_seo_files()
+    update_seo_files() # 모든 글 생성 후 사이트맵 갱신
+    print(f"🏁 Mission Completed & SEO Files Updated!")
 
 if __name__ == "__main__":
     main()
