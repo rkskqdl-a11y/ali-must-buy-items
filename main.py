@@ -27,7 +27,6 @@ def save_posted_id(p_id):
         f.write(f"{p_id}\n")
 
 def get_ali_products():
-    """다양한 카테고리를 랜덤하게 선택하여 모든 상품군을 커버합니다."""
     cat_ids = ["3", "1501", "34", "66", "7", "44", "502", "1503", "1511", "18", "509", "26", "15", "2", "1524"]
     cat_id = random.choice(cat_ids)
     url = "https://api-sg.aliexpress.com/sync"
@@ -56,18 +55,18 @@ def generate_blog_content(product):
         res_json = response.json()
         if "candidates" in res_json:
             return res_json["candidates"][0]["content"]["parts"][0]["text"]
-        if "quota" in str(res_json).lower() or "429" in str(res_json):
-            time.sleep(70)
     except: pass
     return None
 
 def update_seo_files():
-    """XML 선언문의 공백 에러를 방지하고 사이트맵을 갱신합니다."""
+    """사이트맵 XML 선언 오류와 네임스페이스 경고를 해결합니다."""
     posts = sorted([f for f in os.listdir("_posts") if f.endswith(".md")], reverse=True)
     now = datetime.now().strftime("%Y-%m-%d")
     
-    # ✅ 중요: XML 선언문 앞에 절대 공백이 없도록 첫 줄부터 바로 시작합니다.
-    sitemap = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+    # ✅ 1. XML 선언문: 파일의 절대적인 첫 시작이어야 함
+    # ✅ 2. xmlns: 큰따옴표("")를 사용하여 표준 규격 준수
+    sitemap = '<?xml version="1.0" encoding="UTF-8"?>\n'
+    sitemap += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
     sitemap += f'  <url><loc>{SITE_URL}/</loc><lastmod>{now}</lastmod><priority>1.0</priority></url>\n'
     
     for p in posts:
@@ -80,11 +79,11 @@ def update_seo_files():
             
     sitemap += '</urlset>'
     
-    # ✅ sitemap.xml 저장 (불필요한 공백 제거)
+    # sitemap.xml 저장 (앞뒤 불필요한 공백 완전 제거)
     with open("sitemap.xml", "w", encoding="utf-8") as f:
         f.write(sitemap.strip())
     
-    # ✅ robots.txt 저장 (Sitemap 경로를 구글이 인지하기 쉽게 절대경로로 기입)
+    # robots.txt 저장 (Sitemap 경로를 구글이 인지하기 쉽게 절대경로로 기입)
     robots = f"User-agent: *\nAllow: /\n\nSitemap: {SITE_URL}/sitemap.xml"
     with open("robots.txt", "w", encoding="utf-8") as f:
         f.write(robots)
