@@ -7,12 +7,14 @@ import requests
 import json
 from datetime import datetime
 
-# 1. 환경 변수 및 설정
+# 1. 환경 변수 및 설정 (새 주소 반영)
 ALI_APP_KEY = os.environ.get("ALI_APP_KEY", "").strip()
 ALI_SECRET = os.environ.get("ALI_SECRET", "").strip()
 ALI_TRACKING_ID = os.environ.get("ALI_TRACKING_ID", "").strip()
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
-SITE_URL = "https://rkskqdl-a11y.github.io/ali-must-buy-items"
+
+# ✅ 새로운 저장소 이름이 반영된 주소입니다.
+SITE_URL = "https://rkskqdl-a11y.github.io/global-hot-deals"
 
 ID_LOG_FILE = "posted_ids.txt"
 
@@ -27,7 +29,7 @@ def save_posted_id(p_id):
         f.write(f"{p_id}\n")
 
 def get_ali_products():
-    """랜덤 카테고리에서 상품 정보를 수집합니다."""
+    """랜덤 카테고리 상품 수집"""
     cat_ids = ["3", "1501", "34", "66", "7", "44", "502", "1503", "1511", "18", "509", "26", "15", "2", "1524"]
     cat_id = random.choice(cat_ids)
     url = "https://api-sg.aliexpress.com/sync"
@@ -60,19 +62,18 @@ def generate_blog_content(product):
     return None
 
 def update_seo_files():
-    """네임스페이스 오류를 완전히 해결하고 모든 SEO 파일을 갱신합니다."""
-    print("🛠️ Updating SEO files with enhanced standards...")
+    """모든 SEO 파일과 메인 index.md를 표준 규격에 맞게 강제 갱신합니다."""
+    print("🛠️ Updating SEO & Index files for Global Hot Deals...")
     posts = sorted([f for f in os.listdir("_posts") if f.endswith(".md")], reverse=True)
     now_dt = datetime.now()
     now_str = now_dt.strftime("%Y-%m-%d")
     now_full = now_dt.strftime("%Y-%m-%d %H:%M:%S")
     
-    # 1. Sitemap.xml: 모든 엄격한 규격을 포함한 네임스페이스 선언
+    # 1. Sitemap.xml
     sitemap = '<?xml version="1.0" encoding="UTF-8"?>\n'
     sitemap += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" '
     sitemap += 'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '
     sitemap += 'xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9 http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">\n'
-    
     sitemap += f'  <url><loc>{SITE_URL}/</loc><lastmod>{now_str}</lastmod><priority>1.0</priority></url>\n'
     for p in posts:
         parts = p.replace(".md", "").split("-")
@@ -82,23 +83,23 @@ def update_seo_files():
             loc_url = f"{SITE_URL}/{year}/{month}/{day}/{title_id}.html"
             sitemap += f'  <url><loc>{loc_url}</loc><lastmod>{now_str}</lastmod></url>\n'
     sitemap += '</urlset>'
-    
-    # 파일 저장 (공백 제거 및 특수 공백 치환)
     with open("sitemap.xml", "w", encoding="utf-8") as f:
         f.write(sitemap.replace('\xa0', ' ').strip())
 
-    # 2. robots.txt (캐시 방지 주석 포함)
+    # 2. robots.txt
     robots = f"User-agent: *\nAllow: /\n\n# Last Updated: {now_full}\nSitemap: {SITE_URL}/sitemap.xml"
     with open("robots.txt", "w", encoding="utf-8") as f:
         f.write(robots.strip())
 
-    # 3. index.md (목록 자동 갱신)
+    # 3. index.md
     index_content = f"""---
 layout: default
 title: Home
 last_updated: "{now_full}"
 ---
-# AliExpress Daily Must-Buy Items
+# Global Hot Deals
+*Quality Items & Best Value Picks*
+
 *Last Updated: {now_full} (KST)*
 
 <ul>
@@ -108,7 +109,7 @@ last_updated: "{now_full}"
 </ul>"""
     with open("index.md", "w", encoding="utf-8") as f:
         f.write(index_content.strip())
-    print(f"   ✅ SEO files and index.md fully updated at {now_full}")
+    print(f"   ✅ All SEO files and index.md updated.")
 
 def main():
     os.makedirs("_posts", exist_ok=True)
@@ -116,7 +117,7 @@ def main():
     posted_ids = load_posted_ids()
     success_count = 0
     max_posts = 10 
-    disclosure = "> **Affiliate Disclosure:** As an AliExpress Associate, I earn from qualifying purchases.\n\n"
+    disclosure = "> **Affiliate Disclosure:** As an Associate, I earn from qualifying purchases.\n\n"
 
     print(f"🚀 Mission Start: {max_posts} Posts for {today_str}")
 
@@ -131,28 +132,25 @@ def main():
             p_id = str(p.get('product_id'))
             if p_id in posted_ids: continue
             
+            # ✅ 제목 정제: 쌍따옴표와 콜론을 처리하여 포스팅 깨짐 방지
+            raw_title = p.get('product_title', 'Must-Buy Item')
+            clean_title = raw_title.replace('"', "'").replace(':', '-')
+            
             img_url = p.get('product_main_image_url', '').strip()
             if img_url.startswith('//'): img_url = 'https:' + img_url
             img_url = img_url.split('?')[0]
 
             content = generate_blog_content(p)
             if not content:
-                content = (
-                    "\n\n### Product Specifications\n\n"
-                    "| Attribute | Detail |\n"
-                    "| :--- | :--- |\n"
-                    f"| **Item** | {p.get('product_title')} |\n"
-                    f"| **Price** | ${p.get('target_sale_price')} |\n"
-                    "| **Status** | Highly Recommended |\n\n"
-                )
+                content = f"\n\n### Recommendation\n{clean_title} is a great choice for your needs."
 
             file_path = f"_posts/{today_str}-{p_id}.md"
             with open(file_path, "w", encoding="utf-8") as f:
-                f.write(f"---\nlayout: post\ntitle: \"{p['product_title']}\"\ndate: {today_str}\n---\n\n"
+                f.write(f"---\nlayout: post\ntitle: \"{clean_title}\"\ndate: {today_str}\n---\n\n"
                         f"{disclosure}"
-                        f"<img src=\"{img_url}\" alt=\"{p['product_title']}\" referrerpolicy=\"no-referrer\" style=\"width:100%; max-width:600px; display:block; margin:20px 0;\">\n\n"
+                        f"<img src=\"{img_url}\" alt=\"{clean_title}\" referrerpolicy=\"no-referrer\" style=\"width:100%; max-width:600px; display:block; margin:20px 0;\">\n\n"
                         f"{content}\n\n"
-                        f"### [🛒 Shop Now on AliExpress]({p.get('promotion_link')})")
+                        f"### [🛒 Shop Now]({p.get('promotion_link')})")
             
             save_posted_id(p_id)
             posted_ids.add(p_id)
