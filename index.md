@@ -1,10 +1,12 @@
 ---
 layout: default
 title: Home
-last_updated: "2026-02-02 01:18:20"
+last_updated: "2026-02-02 04:35:26"
 ---
-# AliExpress Daily Must-Buy Items
-*Last Updated: 2026-02-02 01:18:20 (KST)*
+# Global Hot Deals
+*Quality Items & Best Value Picks*
+
+*Last Updated: 2026-02-02 04:35:26 (KST)*
 
 <ul>
   {% for post in site.posts %}
